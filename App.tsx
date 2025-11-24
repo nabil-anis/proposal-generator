@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import TextArea from './components/TextArea';
 import Button from './components/Button';
@@ -106,11 +105,6 @@ const App: React.FC = () => {
 
         <div className="w-full relative">
           {/* Input Card */}
-          {/* 
-              Structure:
-              If SUCCESS: absolute, opacity 0, pointer-events-none (to fade out while output takes flow)
-              If IDLE/GENERATING: relative, opacity 100 (takes natural space)
-          */}
           <div className={`
             w-full transition-all duration-700 ease-spring
             ${appState === AppState.SUCCESS 
@@ -119,10 +113,12 @@ const App: React.FC = () => {
             }
           `}>
             {/* Outer Bezel - Refined Polish */}
-            <div className="glass-light dark:glass-dark rounded-[32px] p-[2px] transition-all duration-500 shadow-2xl shadow-black/5 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/5">
+            <div className="glass-light dark:glass-dark rounded-[32px] p-[1px] transition-all duration-500 shadow-2xl shadow-black/5 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/5">
+              
               {/* Inner Content - Screen Effect */}
-              <div className="bg-white/30 dark:bg-white/5 rounded-[30px] p-1 backdrop-blur-[2px]">
-                 <div className="bg-white/30 dark:bg-black/60 rounded-[26px] p-6 transition-colors duration-500 border border-white/20 dark:border-white/5 shadow-inner">
+              <div className="bg-white/40 dark:bg-[#1c1c1e]/50 rounded-[31px] p-1.5 backdrop-blur-[2px]">
+                 {/* Input Surface */}
+                 <div className="bg-white/60 dark:bg-black/80 rounded-[28px] p-6 transition-colors duration-500 border border-white/40 dark:border-white/10 shadow-sm">
                     <div className="h-48 md:h-64">
                       <TextArea
                         placeholder="Paste the job description here, along with any quick notes about your relevant experience..."
@@ -130,9 +126,10 @@ const App: React.FC = () => {
                         onChange={(e) => setSummary(e.target.value)}
                       />
                     </div>
-                    <div className="flex justify-between items-center px-1 py-2 border-t border-black/5 dark:border-white/5 mt-2">
-                      <span className="text-xs text-gray-400 dark:text-zinc-400 font-medium ml-2">
-                        {summary.length > 0 ? `${summary.length} chars` : 'Ready'}
+                    {/* Toolbar */}
+                    <div className="flex justify-between items-center px-1 py-2 border-t border-black/5 dark:border-white/10 mt-2">
+                      <span className="text-xs text-gray-400 dark:text-zinc-500 font-medium ml-2 tracking-wide">
+                        {summary.length > 0 ? `${summary.length} CHARS` : 'READY'}
                       </span>
                       <Button 
                         onClick={handleGenerate} 
@@ -176,8 +173,9 @@ const App: React.FC = () => {
       </main>
 
       {/* Footer - Adjusted to ensure no overlap */}
-      <footer className="w-full py-6 text-center z-10 mt-auto">
+      <footer className="w-full py-6 text-center z-10 mt-auto relative">
         <p className="text-xs text-gray-400 dark:text-zinc-600 font-medium">Designed for professionals.</p>
+        <span className="absolute right-4 bottom-2 text-gray-400 dark:text-zinc-600 text-xs italic">By nbl.</span>
       </footer>
     </div>
   );

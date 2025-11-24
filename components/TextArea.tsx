@@ -15,11 +15,11 @@ const TextArea: React.FC<TextAreaProps> = ({ label, className = '', ...props }) 
       )}
       <textarea
         className={`
-          w-full h-full p-4 bg-transparent
-          text-gray-900 dark:text-zinc-100 placeholder-gray-400 dark:placeholder-zinc-400
+          w-full h-full p-2 bg-transparent
+          text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-400
           text-lg leading-relaxed
           border-0 outline-none ring-0 focus:ring-0
-          resize-none
+          resize-none selection:bg-blue-500/30
           ${className}
         `}
         {...props}
