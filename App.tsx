@@ -9,22 +9,31 @@ const App: React.FC = () => {
   const [summary, setSummary] = useState('');
   const [generatedProposal, setGeneratedProposal] = useState('');
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-
-  // Initialize theme based on system preference
-  useEffect(() => {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setTheme('dark');
+  
+  // Initialize theme lazily to prevent flash of wrong theme and check persistence
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
     }
-  }, []);
+    return 'light';
+  });
 
-  // Update DOM class for dark mode
+  // Handle theme changes: update DOM, localStorage, and meta theme-color for mobile
   useEffect(() => {
+    const root = document.documentElement;
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+
     if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
+      root.classList.add('dark');
+      metaThemeColor?.setAttribute('content', '#09090b');
     } else {
-      document.documentElement.classList.remove('dark');
+      root.classList.remove('dark');
+      metaThemeColor?.setAttribute('content', '#fafafa'); // zinc-50
     }
+    
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {
@@ -53,7 +62,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col relative overflow-hidden transition-colors duration-700 bg-zinc-50 dark:bg-[#09090b] font-sans">
+    <div className="min-h-[100dvh] w-full flex flex-col relative overflow-hidden transition-colors duration-700 bg-zinc-50 dark:bg-[#09090b] font-sans">
       
       {/* Abstract Background Blobs - Charcoal/Monochrome Theme */}
       <div className="fixed top-[-20%] left-[-10%] w-[600px] h-[600px] bg-gray-300/30 dark:bg-zinc-800/10 rounded-full blur-[120px] pointer-events-none transition-colors duration-700" />
