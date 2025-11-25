@@ -64,15 +64,16 @@
       }
       
       /* Refined Glassmorphism - Premium Feel */
-      .glass-light {
+      .glass-panel {
         background: rgba(255, 255, 255, 0.75);
         backdrop-filter: blur(20px) saturate(180%);
         -webkit-backdrop-filter: blur(20px) saturate(180%);
         border: 1px solid rgba(255, 255, 255, 0.6);
         box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.08);
+        transition: background-color 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
       }
       
-      .glass-dark {
+      .dark .glass-panel {
         background: rgba(28, 28, 30, 0.6);
         backdrop-filter: blur(40px) saturate(180%);
         -webkit-backdrop-filter: blur(40px) saturate(180%);

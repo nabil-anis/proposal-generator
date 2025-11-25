@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 
 interface OutputDisplayProps {
@@ -20,7 +19,7 @@ const OutputDisplay: React.FC<OutputDisplayProps> = ({ content, onClose }) => {
   };
 
   return (
-    <div className="w-full glass-light dark:glass-dark rounded-[24px] overflow-hidden shadow-2xl animate-fade-in-up ring-1 ring-black/5 dark:ring-white/10 transition-all duration-500">
+    <div className="w-full glass-panel rounded-[24px] overflow-hidden shadow-2xl animate-fade-in-up ring-1 ring-black/5 dark:ring-white/10 transition-all duration-500">
       {/* Header - Unified with body, no distinct border/bg for seamless look */}
       <div className="px-6 pt-5 pb-2 flex justify-between items-center relative z-20">
         {/* Authentic macOS Window Controls */}
