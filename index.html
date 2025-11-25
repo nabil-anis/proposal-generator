@@ -1,11 +1,17 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#fafafa">
+    <meta name="color-scheme" content="light dark">
     <title>Upwork Proposal Generator</title>
+    
+    <!-- Load Tailwind CSS first -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Configure Tailwind -->
     <script>
       tailwind.config = {
         darkMode: 'class',
@@ -43,14 +49,45 @@
         }
       }
     </script>
+    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+      /* Enforce color scheme to fix form controls and system UI */
+      :root {
+        color-scheme: light;
+      }
+      :root.dark {
+        color-scheme: dark;
+      }
+
+      /* Global Smooth Theme Transition */
+      *, *::before, *::after {
+        transition-property: background-color, border-color, color, fill, stroke, shadow, opacity;
+        transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+        transition-duration: 500ms;
+      }
+
+      /* Exclude transform/opacity for animations to prevent conflicts */
+      .animate-fade-in-up, .animate-shake {
+        transition: none;
+      }
+
+      /* Ensure html background matches theme to fix overscroll/rubber-banding color on mobile */
+      html {
+        background-color: #fafafa;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html.dark {
+        background-color: #09090b;
+      }
+
       body {
         font-family: 'Inter', sans-serif;
-        transition: background-color 0.5s cubic-bezier(0.32, 0, 0.67, 0);
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
+        overscroll-behavior-y: none; /* Helps prevent pulling the page too far */
       }
+      
       /* Custom scrollbar for textareas */
       textarea::-webkit-scrollbar {
         width: 8px;
@@ -70,7 +107,6 @@
         -webkit-backdrop-filter: blur(20px) saturate(180%);
         border: 1px solid rgba(255, 255, 255, 0.6);
         box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.08);
-        transition: background-color 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
       }
       
       .dark .glass-panel {
@@ -81,6 +117,24 @@
         box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.6);
       }
     </style>
+    
+    <!-- Script to apply theme immediately to prevent FOUC -->
+    <script>
+      (function() {
+        try {
+          const savedTheme = localStorage.getItem('theme');
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          // Default to light unless explicitly dark or system preference is dark AND no saved preference
+          if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+            document.documentElement.classList.add('dark');
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', '#09090b');
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', '#fafafa');
+          }
+        } catch (e) {}
+      })();
+    </script>
   <script type="importmap">
 {
   "imports": {
@@ -92,7 +146,7 @@
 }
 </script>
 </head>
-  <body class="bg-zinc-50 dark:bg-[#09090b] text-[#1D1D1F] dark:text-[#F5F5F7]">
+  <body class="bg-zinc-50 dark:bg-[#09090b] text-[#1D1D1F] dark:text-[#F5F5F7] antialiased">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

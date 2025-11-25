@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import TextArea from './components/TextArea';
 import Button from './components/Button';
@@ -10,9 +11,12 @@ const App: React.FC = () => {
   const [generatedProposal, setGeneratedProposal] = useState('');
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   
-  // Initialize theme lazily to prevent flash of wrong theme and check persistence
+  // Initialize theme state. We check the DOM classList first to match the inline script in index.html,
+  // preventing hydration mismatches.
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
+      if (document.documentElement.classList.contains('dark')) return 'dark';
+      
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
       if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
@@ -62,11 +66,11 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[100dvh] w-full flex flex-col relative overflow-hidden transition-colors duration-700 bg-zinc-50 dark:bg-[#09090b] font-sans selection:bg-blue-500/30">
+    <div className="min-h-[100dvh] w-full flex flex-col relative overflow-hidden transition-colors duration-500 bg-zinc-50 dark:bg-[#09090b] font-sans selection:bg-blue-500/30">
       
       {/* Abstract Background Blobs - Refined for mobile */}
-      <div className="fixed top-[-10%] left-[-20%] w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-gray-300/30 dark:bg-zinc-800/10 rounded-full blur-[80px] md:blur-[120px] pointer-events-none transition-colors duration-700" />
-      <div className="fixed bottom-[-10%] right-[-20%] w-[400px] md:w-[700px] h-[400px] md:h-[700px] bg-zinc-300/30 dark:bg-zinc-700/10 rounded-full blur-[100px] md:blur-[140px] pointer-events-none transition-colors duration-700" />
+      <div className="fixed top-[-10%] left-[-20%] w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-gray-300/30 dark:bg-zinc-800/10 rounded-full blur-[80px] md:blur-[120px] pointer-events-none transition-colors duration-500" />
+      <div className="fixed bottom-[-10%] right-[-20%] w-[400px] md:w-[700px] h-[400px] md:h-[700px] bg-zinc-300/30 dark:bg-zinc-700/10 rounded-full blur-[100px] md:blur-[140px] pointer-events-none transition-colors duration-500" />
 
       {/* Floating Glass Navbar */}
       <div className="fixed top-0 left-0 right-0 z-50 flex justify-center p-4 pt-4 supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(1rem+env(safe-area-inset-top))] pointer-events-none">
