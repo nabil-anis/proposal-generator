@@ -6,6 +6,11 @@ export interface ProposalResponse {
   proposalText: string;
 }
 
+export interface TrainingData {
+  customInstructions: string;
+  exampleProposal: string;
+}
+
 export enum AppState {
   IDLE = 'IDLE',
   GENERATING = 'GENERATING',

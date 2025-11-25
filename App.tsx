@@ -1,40 +1,61 @@
-
 import React, { useState, useEffect } from 'react';
 import TextArea from './components/TextArea';
 import Button from './components/Button';
 import OutputDisplay from './components/OutputDisplay';
+import TrainingPanel from './components/TrainingPanel';
 import { generateProposal } from './services/geminiService';
-import { AppState } from './types';
+import { AppState, TrainingData } from './types';
 
 const App: React.FC = () => {
   const [summary, setSummary] = useState('');
   const [generatedProposal, setGeneratedProposal] = useState('');
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
+  const [isTrainingOpen, setIsTrainingOpen] = useState(false);
   
-  // Initialize theme state. We check the DOM classList first to match the inline script in index.html,
-  // preventing hydration mismatches.
+  // Initialize Training Data from LocalStorage
+  const [trainingData, setTrainingData] = useState<TrainingData>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('trainingData');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse training data");
+        }
+      }
+    }
+    return { customInstructions: '', exampleProposal: '' };
+  });
+
+  // Save Training Data
+  useEffect(() => {
+    localStorage.setItem('trainingData', JSON.stringify(trainingData));
+  }, [trainingData]);
+  
+  // Initialize theme state
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       if (document.documentElement.classList.contains('dark')) return 'dark';
-      
       const savedTheme = localStorage.getItem('theme');
       if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme;
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
     }
     return 'light';
   });
 
-  // Handle theme changes: update DOM, localStorage, and meta theme-color for mobile
+  // Handle theme changes
   useEffect(() => {
     const root = document.documentElement;
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    const metaColorScheme = document.querySelector('meta[name="color-scheme"]');
 
     if (theme === 'dark') {
       root.classList.add('dark');
       metaThemeColor?.setAttribute('content', '#09090b');
+      metaColorScheme?.setAttribute('content', 'dark');
     } else {
       root.classList.remove('dark');
-      metaThemeColor?.setAttribute('content', '#fafafa'); // zinc-50
+      metaThemeColor?.setAttribute('content', '#fafafa');
+      metaColorScheme?.setAttribute('content', 'light');
     }
     
     localStorage.setItem('theme', theme);
@@ -44,6 +65,10 @@ const App: React.FC = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
+  const handleUpdateTraining = (field: keyof TrainingData, value: string) => {
+    setTrainingData(prev => ({ ...prev, [field]: value }));
+  };
+
   const handleGenerate = async () => {
     if (!summary.trim()) return;
     
@@ -51,7 +76,7 @@ const App: React.FC = () => {
     setGeneratedProposal('');
 
     try {
-      const result = await generateProposal(summary);
+      const result = await generateProposal(summary, trainingData);
       setGeneratedProposal(result);
       setAppState(AppState.SUCCESS);
     } catch (error) {
@@ -68,7 +93,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-[100dvh] w-full flex flex-col relative overflow-hidden transition-colors duration-500 bg-zinc-50 dark:bg-[#09090b] font-sans selection:bg-blue-500/30">
       
-      {/* Abstract Background Blobs - Refined for mobile */}
+      {/* Abstract Background Blobs */}
       <div className="fixed top-[-10%] left-[-20%] w-[300px] md:w-[600px] h-[300px] md:h-[600px] bg-gray-300/30 dark:bg-zinc-800/10 rounded-full blur-[80px] md:blur-[120px] pointer-events-none transition-colors duration-500" />
       <div className="fixed bottom-[-10%] right-[-20%] w-[400px] md:w-[700px] h-[400px] md:h-[700px] bg-zinc-300/30 dark:bg-zinc-700/10 rounded-full blur-[100px] md:blur-[140px] pointer-events-none transition-colors duration-500" />
 
@@ -88,24 +113,45 @@ const App: React.FC = () => {
              <span className="font-semibold text-gray-800 dark:text-gray-200 tracking-tight text-sm md:text-base">Proposal Gen</span>
           </div>
 
-          {/* Theme Toggle */}
-          <button 
-            onClick={toggleTheme}
-            className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90"
-            aria-label="Toggle Theme"
-          >
-            {theme === 'light' ? (
-              <svg className="w-4 h-4 text-gray-600 group-hover:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          <div className="flex items-center gap-2">
+            {/* Training Button */}
+            <button 
+              onClick={() => setIsTrainingOpen(true)}
+              className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90 flex items-center gap-2 px-3"
+              aria-label="Training Settings"
+            >
+              <svg className="w-4 h-4 text-gray-600 dark:text-zinc-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
               </svg>
-            ) : (
-               <svg className="w-4 h-4 text-zinc-400 group-hover:text-zinc-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            )}
-          </button>
+              <span className="text-xs font-medium text-gray-600 dark:text-zinc-400 hidden sm:block">Customize</span>
+            </button>
+
+            {/* Theme Toggle */}
+            <button 
+              onClick={toggleTheme}
+              className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90"
+              aria-label="Toggle Theme"
+            >
+              {theme === 'light' ? (
+                <svg className="w-4 h-4 text-gray-600 group-hover:text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-zinc-400 group-hover:text-zinc-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              )}
+            </button>
+          </div>
         </nav>
       </div>
+
+      <TrainingPanel 
+        isOpen={isTrainingOpen} 
+        onClose={() => setIsTrainingOpen(false)}
+        data={trainingData}
+        onUpdate={handleUpdateTraining}
+      />
 
       {/* Main Content */}
       <main className={`
