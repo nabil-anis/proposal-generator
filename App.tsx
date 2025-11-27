@@ -3,14 +3,18 @@ import TextArea from './components/TextArea';
 import Button from './components/Button';
 import OutputDisplay from './components/OutputDisplay';
 import TrainingPanel from './components/TrainingPanel';
+import AuthModal from './components/AuthModal';
 import { generateProposal } from './services/geminiService';
 import { AppState, TrainingData } from './types';
+import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
   const [summary, setSummary] = useState('');
   const [generatedProposal, setGeneratedProposal] = useState('');
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [isTrainingOpen, setIsTrainingOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
   
   // Initialize Training Data from LocalStorage
   const [trainingData, setTrainingData] = useState<TrainingData>(() => {
@@ -18,21 +22,108 @@ const App: React.FC = () => {
       const saved = localStorage.getItem('trainingData');
       if (saved) {
         try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error("Failed to parse training data");
-        }
+          const parsed = JSON.parse(saved);
+          if (parsed.exampleProposal && !parsed.examples) {
+            return {
+              customInstructions: parsed.customInstructions || '',
+              examples: [parsed.exampleProposal],
+              isLocked: false
+            };
+          }
+          return {
+            customInstructions: parsed.customInstructions || '',
+            examples: Array.isArray(parsed.examples) ? parsed.examples : [],
+            isLocked: parsed.isLocked || false
+          };
+        } catch (e) {}
       }
     }
-    return { customInstructions: '', exampleProposal: '' };
+    return { customInstructions: '', examples: [], isLocked: false };
   });
 
-  // Save Training Data
+  // Check User Session on Mount
   useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadDataFromSupabase(session.user.id);
+      }
+    };
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        loadDataFromSupabase(session.user.id);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadDataFromSupabase = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('training_data')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+        
+      if (data) {
+        setTrainingData({
+          customInstructions: data.custom_instructions || '',
+          examples: data.examples || [],
+          isLocked: data.is_locked || false
+        });
+        // Sync cloud data to local storage for offline backup/fast load
+        localStorage.setItem('trainingData', JSON.stringify({
+          customInstructions: data.custom_instructions || '',
+          examples: data.examples || [],
+          isLocked: data.is_locked || false
+        }));
+      } else if (!error || error.code === 'PGRST116') {
+        // No data found on cloud, but user is logged in. 
+        // OPTIONAL: Push local data to cloud automatically?
+        // For now, we wait for next update.
+      }
+    } catch (err) {
+      console.error('Error fetching data:', err);
+    }
+  };
+
+  const saveDataToSupabase = async (newData: TrainingData) => {
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from('training_data')
+        .upsert({
+          user_id: user.id,
+          custom_instructions: newData.customInstructions,
+          examples: newData.examples,
+          is_locked: newData.isLocked,
+          updated_at: new Date().toISOString()
+        });
+        
+      if (error) console.error('Error saving to cloud:', error);
+    } catch (err) {
+      console.error('Supabase error:', err);
+    }
+  };
+
+  // Save Training Data (Local + Cloud)
+  useEffect(() => {
+    // Always save to local storage
     localStorage.setItem('trainingData', JSON.stringify(trainingData));
-  }, [trainingData]);
+    
+    // If logged in, save to Supabase
+    if (user) {
+      // Debounce could be added here to reduce writes, but for now simple works
+      saveDataToSupabase(trainingData);
+    }
+  }, [trainingData, user]);
   
-  // Initialize theme state
+  // Theme initialization logic
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (typeof window !== 'undefined') {
       if (document.documentElement.classList.contains('dark')) return 'dark';
@@ -42,7 +133,6 @@ const App: React.FC = () => {
     return 'light';
   });
 
-  // Handle theme changes
   useEffect(() => {
     const root = document.documentElement;
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
@@ -65,8 +155,8 @@ const App: React.FC = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  const handleUpdateTraining = (field: keyof TrainingData, value: string) => {
-    setTrainingData(prev => ({ ...prev, [field]: value }));
+  const handleUpdateTraining = (newData: Partial<TrainingData>) => {
+    setTrainingData(prev => ({ ...prev, ...newData }));
   };
 
   const handleGenerate = async () => {
@@ -90,6 +180,12 @@ const App: React.FC = () => {
     setAppState(AppState.IDLE);
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    // Optional: Clear training data on logout? For now we keep it (local behavior).
+  };
+
   return (
     <div className="min-h-[100dvh] w-full flex flex-col relative overflow-hidden transition-colors duration-500 bg-zinc-50 dark:bg-[#09090b] font-sans selection:bg-blue-500/30">
       
@@ -110,7 +206,7 @@ const App: React.FC = () => {
              <div className="w-8 h-8 bg-gradient-to-br from-[#0071e3] to-[#42a1ff] rounded-full shadow-lg shadow-blue-500/20 flex items-center justify-center text-white font-bold text-xs tracking-wider">
                UP
              </div>
-             <span className="font-semibold text-gray-800 dark:text-gray-200 tracking-tight text-sm md:text-base">Proposal Gen</span>
+             <span className="font-semibold text-gray-800 dark:text-gray-200 tracking-tight text-sm md:text-base hidden xs:block">Proposal Gen</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -120,10 +216,35 @@ const App: React.FC = () => {
               className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90 flex items-center gap-2 px-3"
               aria-label="Training Settings"
             >
-              <svg className="w-4 h-4 text-gray-600 dark:text-zinc-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+              <svg className={`w-4 h-4 transition-colors ${trainingData.isLocked ? 'text-green-500' : 'text-gray-600 dark:text-zinc-400 group-hover:text-blue-500 dark:group-hover:text-blue-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {trainingData.isLocked ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                )}
               </svg>
-              <span className="text-xs font-medium text-gray-600 dark:text-zinc-400 hidden sm:block">Customize</span>
+              <span className={`text-xs font-medium hidden sm:block ${trainingData.isLocked ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-zinc-400'}`}>
+                {trainingData.isLocked ? 'Locked' : 'Customize'}
+              </span>
+            </button>
+
+            {/* Auth Button */}
+            <button
+              onClick={() => user ? handleLogout() : setIsAuthOpen(true)}
+              className={`
+                p-2 px-3 rounded-full text-xs font-medium transition-all duration-300 flex items-center gap-2
+                ${user 
+                  ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400' 
+                  : 'bg-black/5 dark:bg-white/10 text-gray-600 dark:text-zinc-400 hover:bg-black/10 dark:hover:bg-white/20'
+                }
+              `}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span className="hidden sm:block">
+                {user ? 'Sign Out' : 'Sign In'}
+              </span>
             </button>
 
             {/* Theme Toggle */}
@@ -151,6 +272,15 @@ const App: React.FC = () => {
         onClose={() => setIsTrainingOpen(false)}
         data={trainingData}
         onUpdate={handleUpdateTraining}
+      />
+
+      <AuthModal 
+        isOpen={isAuthOpen} 
+        onClose={() => setIsAuthOpen(false)}
+        onLoginSuccess={() => {
+           // Maybe show a toast or welcome message here
+           setIsAuthOpen(false);
+        }}
       />
 
       {/* Main Content */}

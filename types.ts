@@ -8,7 +8,8 @@ export interface ProposalResponse {
 
 export interface TrainingData {
   customInstructions: string;
-  exampleProposal: string;
+  examples: string[]; // Changed from single string to array
+  isLocked: boolean;  // New field to lock editing
 }
 
 export enum AppState {

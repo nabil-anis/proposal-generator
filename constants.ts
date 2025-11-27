@@ -2,6 +2,10 @@
 
 export const APP_TITLE = "Upwork Proposal Generator";
 
+// Supabase Configuration
+export const SUPABASE_URL = "https://mkejgrqlxzagdphjvjip.supabase.co";
+export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rZWpncnFseHphZ2RwaGp2amlwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyMzMwNjYsImV4cCI6MjA3OTgwOTA2Nn0.eCWqj3u8KVfJPOd56h08fi38JgWHGLDD5jaUyfX_w8A";
+
 export const SYSTEM_PROMPT = `
 You are an elite Upwork proposal writer. Your goal is to write proposals that are indistinguishable from those written by a top 1% freelancer—concise, consultative, and human.
 

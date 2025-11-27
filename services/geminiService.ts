@@ -21,16 +21,22 @@ export const generateProposal = async (summary: string, trainingData?: TrainingD
       `;
     }
 
-    if (trainingData.exampleProposal.trim()) {
+    if (trainingData.examples && trainingData.examples.length > 0) {
       trainingContext += `
-      \n*** USER STYLE REFERENCE ***
-      Here is an example of a previous winning proposal written by the user. 
-      Analyze the tone, sentence structure, and vocabulary. Mimic this writing style exactly, but apply it to the new job description.
-      
-      --- START REFERENCE ---
-      ${trainingData.exampleProposal}
-      --- END REFERENCE ---
+      \n*** USER STYLE REFERENCE LIBRARY ***
+      Here are examples of previous winning proposals written by the user. 
+      Analyze the tone, sentence structure, vocabulary, and sign-offs. 
+      Mimic this writing style exactly, but apply it to the new job description.
       `;
+      
+      trainingData.examples.forEach((example, index) => {
+        trainingContext += `
+        \n--- EXAMPLE ${index + 1} ---
+        ${example}
+        `;
+      });
+      
+      trainingContext += `\n--- END EXAMPLES ---`;
     }
   }
 
@@ -43,7 +49,7 @@ export const generateProposal = async (summary: string, trainingData?: TrainingD
   *Instructions:*
   1. Extract job requirements and freelancer context.
   2. Generate a proposal following the System Prompt's Gold Standard Formats.
-  3. If a User Style Reference was provided, prioritize that TONE over the generic system tone, but keep the Gold Standard STRUCTURE.
+  3. If User Style References were provided, prioritize that TONE over the generic system tone, but keep the Gold Standard STRUCTURE.
   4. **CRITICAL:** Keep the output concise (approx. 10% shorter than standard). Aim for maximum impact with minimum words.
   `;
 
