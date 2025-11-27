@@ -1,6 +1,6 @@
 
 
-export const APP_TITLE = "Upwork Proposal Generator";
+export const APP_TITLE = "JobGenie";
 
 // Supabase Configuration
 export const SUPABASE_URL = "https://mkejgrqlxzagdphjvjip.supabase.co";

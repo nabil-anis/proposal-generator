@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import TextArea from './components/TextArea';
 import Button from './components/Button';
@@ -209,9 +210,9 @@ const App: React.FC = () => {
           {/* Logo Section */}
           <div className="flex items-center gap-2.5 opacity-90 hover:opacity-100 transition-opacity cursor-default select-none">
              <div className="w-8 h-8 bg-gradient-to-br from-[#0071e3] to-[#42a1ff] rounded-full shadow-lg shadow-blue-500/20 flex items-center justify-center text-white font-bold text-xs tracking-wider transform transition-transform hover:scale-110">
-               UP
+               JG
              </div>
-             <span className="font-semibold text-gray-800 dark:text-gray-200 tracking-tight text-sm md:text-base hidden xs:block">Proposal Gen</span>
+             <span className="font-semibold text-gray-800 dark:text-gray-200 tracking-tight text-sm md:text-base hidden xs:block">JobGenie</span>
           </div>
 
           <div className="flex items-center gap-2">
