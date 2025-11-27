@@ -13,12 +13,14 @@ const Button: React.FC<ButtonProps> = ({
   className = '', 
   ...props 
 }) => {
-  // Apple-style button base
-  const baseStyles = "px-6 py-3 rounded-full font-medium text-base transition-all duration-300 transform active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center";
+  // Apple-style button base:
+  // - hover:scale-[1.02]: Subtle "breath" / lift effect
+  // - active:scale-[0.98]: Satisfying "click" press
+  const baseStyles = "px-6 py-3 rounded-full font-medium text-base transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100 disabled:hover:scale-100 flex items-center justify-center";
   
   const variants = {
-    primary: "bg-[#0071e3] hover:bg-[#0077ED] text-white shadow-lg shadow-blue-500/30",
-    secondary: "bg-gray-200 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-300 dark:hover:bg-zinc-700",
+    primary: "bg-[#0071e3] hover:bg-[#0077ED] text-white shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50",
+    secondary: "bg-gray-200 dark:bg-zinc-800 text-gray-900 dark:text-white hover:bg-gray-300 dark:hover:bg-zinc-700 hover:shadow-md dark:hover:shadow-black/40",
     ghost: "bg-transparent hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400"
   };
 

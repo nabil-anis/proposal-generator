@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import TextArea from './components/TextArea';
 import Button from './components/Button';
@@ -15,6 +16,8 @@ const App: React.FC = () => {
   const [isTrainingOpen, setIsTrainingOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [extraInstructions, setExtraInstructions] = useState('');
+  const [isExtraOpen, setIsExtraOpen] = useState(false);
   
   // Initialize Training Data from LocalStorage
   const [trainingData, setTrainingData] = useState<TrainingData>(() => {
@@ -166,7 +169,7 @@ const App: React.FC = () => {
     setGeneratedProposal('');
 
     try {
-      const result = await generateProposal(summary, trainingData);
+      const result = await generateProposal(summary, trainingData, extraInstructions);
       setGeneratedProposal(result);
       setAppState(AppState.SUCCESS);
     } catch (error) {
@@ -178,6 +181,8 @@ const App: React.FC = () => {
   const handleReset = () => {
     setGeneratedProposal('');
     setAppState(AppState.IDLE);
+    setExtraInstructions(''); // Reset extra instructions on new generation? Or keep? Let's reset.
+    setIsExtraOpen(false);
   };
 
   const handleLogout = async () => {
@@ -203,7 +208,7 @@ const App: React.FC = () => {
           
           {/* Logo Section */}
           <div className="flex items-center gap-2.5 opacity-90 hover:opacity-100 transition-opacity cursor-default select-none">
-             <div className="w-8 h-8 bg-gradient-to-br from-[#0071e3] to-[#42a1ff] rounded-full shadow-lg shadow-blue-500/20 flex items-center justify-center text-white font-bold text-xs tracking-wider">
+             <div className="w-8 h-8 bg-gradient-to-br from-[#0071e3] to-[#42a1ff] rounded-full shadow-lg shadow-blue-500/20 flex items-center justify-center text-white font-bold text-xs tracking-wider transform transition-transform hover:scale-110">
                UP
              </div>
              <span className="font-semibold text-gray-800 dark:text-gray-200 tracking-tight text-sm md:text-base hidden xs:block">Proposal Gen</span>
@@ -213,7 +218,7 @@ const App: React.FC = () => {
             {/* Training Button */}
             <button 
               onClick={() => setIsTrainingOpen(true)}
-              className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90 flex items-center gap-2 px-3"
+              className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90 hover:scale-105 flex items-center gap-2 px-3"
               aria-label="Training Settings"
             >
               <svg className={`w-4 h-4 transition-colors ${trainingData.isLocked ? 'text-green-500' : 'text-gray-600 dark:text-zinc-400 group-hover:text-blue-500 dark:group-hover:text-blue-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -232,7 +237,7 @@ const App: React.FC = () => {
             <button
               onClick={() => user ? handleLogout() : setIsAuthOpen(true)}
               className={`
-                p-2 px-3 rounded-full text-xs font-medium transition-all duration-300 flex items-center gap-2
+                p-2 px-3 rounded-full text-xs font-medium transition-all duration-300 flex items-center gap-2 hover:scale-105 active:scale-95
                 ${user 
                   ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400' 
                   : 'bg-black/5 dark:bg-white/10 text-gray-600 dark:text-zinc-400 hover:bg-black/10 dark:hover:bg-white/20'
@@ -250,7 +255,7 @@ const App: React.FC = () => {
             {/* Theme Toggle */}
             <button 
               onClick={toggleTheme}
-              className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90"
+              className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90 hover:scale-105"
               aria-label="Toggle Theme"
             >
               {theme === 'light' ? (
@@ -312,7 +317,7 @@ const App: React.FC = () => {
             }
           `}>
             {/* Outer Bezel - Refined Polish */}
-            <div className="glass-panel rounded-[24px] md:rounded-[32px] p-[1px] transition-all duration-500 shadow-xl shadow-black/5 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/5">
+            <div className="glass-panel rounded-[24px] md:rounded-[32px] p-[1px] transition-all duration-500 shadow-xl shadow-black/5 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/5 group hover:shadow-2xl hover:shadow-black/10 dark:hover:shadow-black/70">
               
               {/* Inner Content - Screen Effect */}
               <div className="bg-white/40 dark:bg-[#1c1c1e]/50 rounded-[23px] md:rounded-[31px] p-1.5 backdrop-blur-[2px]">
@@ -325,8 +330,30 @@ const App: React.FC = () => {
                         onChange={(e) => setSummary(e.target.value)}
                       />
                     </div>
+                    
+                    {/* Collapsible Additional Instructions */}
+                    <div className="px-1 border-t border-black/5 dark:border-white/10">
+                      <button 
+                        onClick={() => setIsExtraOpen(!isExtraOpen)}
+                        className="w-full flex items-center justify-between py-2 text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 transition-colors uppercase tracking-wide font-medium"
+                      >
+                         <span>Additional Instructions (Optional)</span>
+                         <svg className={`w-3 h-3 transition-transform duration-300 ${isExtraOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      
+                      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isExtraOpen ? 'max-h-24 opacity-100 mb-2' : 'max-h-0 opacity-0'}`}>
+                        <input 
+                          type="text" 
+                          value={extraInstructions}
+                          onChange={(e) => setExtraInstructions(e.target.value)}
+                          placeholder="e.g. Focus on my 5 years of experience with React..."
+                          className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-blue-500/50 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-zinc-200 placeholder-gray-400 focus:outline-none transition-all"
+                        />
+                      </div>
+                    </div>
+
                     {/* Toolbar */}
-                    <div className="flex justify-between items-center px-1 py-2 border-t border-black/5 dark:border-white/10 mt-2">
+                    <div className="flex justify-between items-center px-1 pt-2">
                       <span className="text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 font-medium ml-1 md:ml-2 tracking-wide uppercase">
                         {summary.length > 0 ? `${summary.length} CHARS` : 'READY'}
                       </span>
@@ -334,7 +361,7 @@ const App: React.FC = () => {
                         onClick={handleGenerate} 
                         isLoading={appState === AppState.GENERATING}
                         disabled={!summary.trim()}
-                        className="scale-90 md:scale-100 origin-right"
+                        className="scale-90 md:scale-100 origin-right shadow-lg shadow-blue-500/20"
                       >
                         Generate
                       </Button>
@@ -354,7 +381,7 @@ const App: React.FC = () => {
               <div className="mt-8 md:mt-12 flex justify-center pb-8">
                  <button 
                   onClick={handleReset}
-                  className="px-6 py-3 md:px-8 md:py-3 rounded-full bg-white/80 dark:bg-zinc-800 text-gray-800 dark:text-zinc-100 font-medium hover:scale-105 active:scale-95 transition-all duration-300 text-sm backdrop-blur-md shadow-lg shadow-black/5 dark:shadow-black/30 border border-white/20 dark:border-white/10"
+                  className="px-6 py-3 md:px-8 md:py-3 rounded-full bg-white/80 dark:bg-zinc-800 text-gray-800 dark:text-zinc-100 font-medium hover:scale-[1.05] active:scale-[0.95] transition-all duration-300 text-sm backdrop-blur-md shadow-lg shadow-black/5 dark:shadow-black/30 border border-white/20 dark:border-white/10"
                  >
                    Create Another
                  </button>

@@ -4,7 +4,7 @@ import { TrainingData } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-export const generateProposal = async (summary: string, trainingData?: TrainingData): Promise<string> => {
+export const generateProposal = async (summary: string, trainingData?: TrainingData, extraInstructions?: string): Promise<string> => {
   if (!process.env.API_KEY) {
     throw new Error("API Key is missing. Please check your environment variables.");
   }
@@ -38,6 +38,14 @@ export const generateProposal = async (summary: string, trainingData?: TrainingD
       
       trainingContext += `\n--- END EXAMPLES ---`;
     }
+  }
+
+  if (extraInstructions && extraInstructions.trim()) {
+    trainingContext += `
+    \n*** ADDITIONAL INSTRUCTIONS ***
+    The user provided the following extra instructions for this specific proposal:
+    "${extraInstructions}"
+    `;
   }
 
   const userPrompt = `
