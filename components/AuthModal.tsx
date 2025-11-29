@@ -40,9 +40,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLoginSuccess }
       };
 
       // Set persistence based on "Remember Me" selection
-      await supabase.auth.setPersistence(
-        rememberMe ? localPersistence : sessionPersistence
-      );
+      // Note: setPersistence is available in newer versions of supabase-js. 
+      // We cast to any to avoid TS errors in case of version mismatch or outdated types.
+      if ((supabase.auth as any).setPersistence) {
+        await (supabase.auth as any).setPersistence(
+          rememberMe ? localPersistence : sessionPersistence
+        );
+      }
 
       if (isSignUp) {
         const { data, error } = await supabase.auth.signUp({

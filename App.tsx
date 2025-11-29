@@ -1,13 +1,14 @@
 
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TextArea from './components/TextArea';
 import Button from './components/Button';
 import OutputDisplay from './components/OutputDisplay';
 import TrainingPanel from './components/TrainingPanel';
 import AuthModal from './components/AuthModal';
+import HistorySidebar from './components/HistorySidebar';
+import QuickControls from './components/QuickControls';
 import { generateProposal } from './services/geminiService';
-import { AppState, TrainingData } from './types';
+import { AppState, TrainingData, ApiConfig, Proposal } from './types';
 import { supabase } from './supabaseClient';
 
 const App: React.FC = () => {
@@ -16,10 +17,36 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [isTrainingOpen, setIsTrainingOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [extraInstructions, setExtraInstructions] = useState('');
   const [isExtraOpen, setIsExtraOpen] = useState(false);
+  const [history, setHistory] = useState<Proposal[]>([]);
   
+  // UX States
+  const [loadingMessage, setLoadingMessage] = useState('Thinking...');
+  const [mobileTab, setMobileTab] = useState<'input' | 'output'>('input');
+  
+  const outputRef = useRef<HTMLDivElement>(null);
+
+  // API Config State (Local Only)
+  const [apiConfig, setApiConfig] = useState<ApiConfig>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('jobGenie_apiConfig');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {}
+      }
+    }
+    return { provider: 'gemini', apiKey: '' };
+  });
+
+  // Save API Config to LocalStorage on change
+  useEffect(() => {
+    localStorage.setItem('jobGenie_apiConfig', JSON.stringify(apiConfig));
+  }, [apiConfig]);
+
   // Initialize Training Data from LocalStorage
   const [trainingData, setTrainingData] = useState<TrainingData>(() => {
     if (typeof window !== 'undefined') {
@@ -52,6 +79,9 @@ const App: React.FC = () => {
       setUser(session?.user ?? null);
       if (session?.user) {
         loadDataFromSupabase(session.user.id);
+        fetchHistory(session.user.id);
+      } else {
+        loadHistoryFromLocal();
       }
     };
     checkSession();
@@ -60,6 +90,10 @@ const App: React.FC = () => {
       setUser(session?.user ?? null);
       if (session?.user) {
         loadDataFromSupabase(session.user.id);
+        fetchHistory(session.user.id);
+      } else {
+        setHistory([]); // Clear sensitive history on logout, or load local guest history
+        loadHistoryFromLocal();
       }
     });
 
@@ -86,10 +120,11 @@ const App: React.FC = () => {
           examples: data.examples || [],
           isLocked: data.is_locked || false
         }));
-      } else if (!error || error.code === 'PGRST116') {
-        // No data found on cloud, but user is logged in. 
-        // OPTIONAL: Push local data to cloud automatically?
-        // For now, we wait for next update.
+        
+        // Sync API Config if exists
+        if (data.api_config && Object.keys(data.api_config).length > 0) {
+            setApiConfig(data.api_config);
+        }
       }
     } catch (err) {
       console.error('Error fetching data:', err);
@@ -106,6 +141,7 @@ const App: React.FC = () => {
           custom_instructions: newData.customInstructions,
           examples: newData.examples,
           is_locked: newData.isLocked,
+          api_config: apiConfig, // Sync API config too
           updated_at: new Date().toISOString()
         });
         
@@ -115,17 +151,67 @@ const App: React.FC = () => {
     }
   };
 
+  // HISTORY MANAGEMENT
+  const fetchHistory = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('proposals')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (data) setHistory(data);
+    } catch (err) {
+      console.error("Error fetching history:", err);
+    }
+  };
+
+  const loadHistoryFromLocal = () => {
+    const local = localStorage.getItem('jobGenie_guestHistory');
+    if (local) {
+      try {
+        setHistory(JSON.parse(local));
+      } catch(e) {}
+    }
+  };
+
+  const saveToHistory = async (input: string, output: string) => {
+    const newEntry: Proposal = {
+      id: crypto.randomUUID(),
+      job_description: input,
+      proposal_text: output,
+      created_at: new Date().toISOString(),
+      user_id: user?.id
+    };
+
+    // Update State
+    const updatedHistory = [newEntry, ...history];
+    setHistory(updatedHistory);
+
+    if (user) {
+      // Save to Supabase
+      try {
+        await supabase.from('proposals').insert({
+          user_id: user.id,
+          job_description: input,
+          proposal_text: output
+        });
+      } catch (err) {
+        console.error("Error saving history to cloud:", err);
+      }
+    } else {
+      // Save to LocalStorage (Guest)
+      localStorage.setItem('jobGenie_guestHistory', JSON.stringify(updatedHistory));
+    }
+  };
+
   // Save Training Data (Local + Cloud)
   useEffect(() => {
-    // Always save to local storage
     localStorage.setItem('trainingData', JSON.stringify(trainingData));
-    
-    // If logged in, save to Supabase
     if (user) {
-      // Debounce could be added here to reduce writes, but for now simple works
       saveDataToSupabase(trainingData);
     }
-  }, [trainingData, user]);
+  }, [trainingData, user, apiConfig]); // Added apiConfig dependency
   
   // Theme initialization logic
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -163,17 +249,50 @@ const App: React.FC = () => {
     setTrainingData(prev => ({ ...prev, ...newData }));
   };
 
+  const handleQuickControl = (text: string) => {
+    if (!extraInstructions.includes(text)) {
+      const newValue = extraInstructions ? `${extraInstructions} ${text}` : text;
+      setExtraInstructions(newValue);
+    }
+    // Auto-open to show the user it was added
+    setIsExtraOpen(true);
+  };
+
   const handleGenerate = async () => {
     if (!summary.trim()) return;
     
     setAppState(AppState.GENERATING);
     setGeneratedProposal('');
+    
+    // Cycle loading messages to build trust ("Magic is invisible" fix)
+    const steps = [
+      "Analyzing Job Description...",
+      "Consulting Training Data...", 
+      "Drafting Strategy...",
+      "Polishing..."
+    ];
+    let stepIndex = 0;
+    setLoadingMessage(steps[0]);
+    
+    const interval = setInterval(() => {
+      stepIndex = (stepIndex + 1) % steps.length;
+      setLoadingMessage(steps[stepIndex]);
+    }, 1500);
 
     try {
-      const result = await generateProposal(summary, trainingData, extraInstructions);
+      // Pass apiConfig to the service
+      const result = await generateProposal(summary, trainingData, extraInstructions, apiConfig);
+      
+      clearInterval(interval);
       setGeneratedProposal(result);
       setAppState(AppState.SUCCESS);
+      setMobileTab('output'); // Auto switch to result on mobile
+      
+      // Save to History
+      saveToHistory(summary, result);
+      
     } catch (error) {
+      clearInterval(interval);
       console.error(error);
       setAppState(AppState.ERROR);
     }
@@ -182,15 +301,27 @@ const App: React.FC = () => {
   const handleReset = () => {
     setGeneratedProposal('');
     setAppState(AppState.IDLE);
-    setExtraInstructions(''); // Reset extra instructions on new generation? Or keep? Let's reset.
+    setExtraInstructions(''); 
     setIsExtraOpen(false);
+    setMobileTab('input');
+  };
+
+  const handleHistorySelect = (proposal: Proposal) => {
+    setSummary(proposal.job_description);
+    setGeneratedProposal(proposal.proposal_text);
+    setAppState(AppState.SUCCESS);
+    setIsHistoryOpen(false);
+    setMobileTab('output');
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    // Optional: Clear training data on logout? For now we keep it (local behavior).
+    setHistory([]);
+    loadHistoryFromLocal(); // Revert to guest history
   };
+
+  const isSuccess = appState === AppState.SUCCESS;
 
   return (
     <div className="min-h-[100dvh] w-full flex flex-col relative overflow-hidden transition-colors duration-500 bg-zinc-50 dark:bg-[#09090b] font-sans selection:bg-blue-500/30">
@@ -201,18 +332,31 @@ const App: React.FC = () => {
 
       {/* Floating Glass Navbar */}
       <div className="fixed top-0 left-0 right-0 z-50 flex justify-center p-4 pt-4 supports-[padding-top:env(safe-area-inset-top)]:pt-[calc(1rem+env(safe-area-inset-top))] pointer-events-none">
-        <nav className="w-full max-w-3xl flex justify-between items-center px-5 py-3 
+        <nav className="w-full max-w-4xl flex justify-between items-center px-5 py-3 
                         glass-panel rounded-full pointer-events-auto
                         shadow-lg shadow-black/5 dark:shadow-black/20 
                         ring-1 ring-black/5 dark:ring-white/10 
                         transition-all duration-500 ease-out">
           
-          {/* Logo Section */}
-          <div className="flex items-center gap-2.5 opacity-90 hover:opacity-100 transition-opacity cursor-default select-none">
-             <div className="w-8 h-8 bg-gradient-to-br from-[#0071e3] to-[#42a1ff] rounded-full shadow-lg shadow-blue-500/20 flex items-center justify-center text-white font-bold text-xs tracking-wider transform transition-transform hover:scale-110">
-               JG
+          <div className="flex items-center gap-4">
+             {/* Logo Section */}
+             <div onClick={() => window.location.reload()} className="flex items-center gap-2.5 opacity-90 hover:opacity-100 transition-opacity cursor-pointer select-none">
+                <div className="w-8 h-8 bg-gradient-to-br from-[#0071e3] to-[#42a1ff] rounded-full shadow-lg shadow-blue-500/20 flex items-center justify-center text-white font-bold text-xs tracking-wider transform transition-transform hover:scale-110">
+                  JG
+                </div>
+                <span className="font-semibold text-gray-800 dark:text-gray-200 tracking-tight text-sm md:text-base hidden xs:block">JobGenie</span>
              </div>
-             <span className="font-semibold text-gray-800 dark:text-gray-200 tracking-tight text-sm md:text-base hidden xs:block">JobGenie</span>
+
+             {/* History Toggle */}
+             <button
+               onClick={() => setIsHistoryOpen(true)}
+               className="p-2 rounded-full bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition-all duration-300 group active:scale-90 hover:scale-105 flex items-center gap-2 px-3"
+             >
+               <svg className="w-4 h-4 text-gray-600 dark:text-zinc-400 group-hover:text-blue-500 dark:group-hover:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+               </svg>
+               <span className="text-xs font-medium text-gray-600 dark:text-zinc-400 hidden sm:block">History</span>
+             </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -230,7 +374,7 @@ const App: React.FC = () => {
                 )}
               </svg>
               <span className={`text-xs font-medium hidden sm:block ${trainingData.isLocked ? 'text-green-600 dark:text-green-400' : 'text-gray-600 dark:text-zinc-400'}`}>
-                {trainingData.isLocked ? 'Locked' : 'Customize'}
+                Studio
               </span>
             </button>
 
@@ -278,26 +422,34 @@ const App: React.FC = () => {
         onClose={() => setIsTrainingOpen(false)}
         data={trainingData}
         onUpdate={handleUpdateTraining}
+        apiConfig={apiConfig}
+        onUpdateApiConfig={setApiConfig}
       />
 
       <AuthModal 
         isOpen={isAuthOpen} 
         onClose={() => setIsAuthOpen(false)}
         onLoginSuccess={() => {
-           // Maybe show a toast or welcome message here
            setIsAuthOpen(false);
         }}
       />
 
+      <HistorySidebar 
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        history={history}
+        onSelect={handleHistorySelect}
+      />
+
       {/* Main Content */}
       <main className={`
-        flex-1 flex flex-col items-center w-full max-w-4xl mx-auto px-4 md:px-6 z-10 
-        pt-28 md:pt-36 pb-12 transition-all duration-500
-        ${appState === AppState.SUCCESS ? 'justify-start' : 'justify-center'}
+        flex-1 flex flex-col w-full mx-auto px-2 md:px-6 z-10 
+        pt-28 md:pt-36 pb-12 transition-all duration-500 ease-in-out
+        ${isSuccess ? 'max-w-7xl justify-start' : 'max-w-4xl justify-center'}
       `}>
         
         {/* Intro Text (only when IDLE) */}
-        {appState === AppState.IDLE && (
+        {!isSuccess && (
           <div className="text-center mb-8 md:mb-12 space-y-3 md:space-y-4 animate-fade-in-up px-2">
             <h1 className="text-4xl md:text-7xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-gray-900 to-gray-600 dark:from-white dark:to-zinc-400 drop-shadow-sm leading-[1.1]">
               Win more work.
@@ -305,98 +457,182 @@ const App: React.FC = () => {
             <p className="text-base md:text-xl text-gray-500 dark:text-zinc-400 max-w-[280px] md:max-w-lg mx-auto font-normal leading-relaxed">
               Paste the job description. We'll handle the persuasion.
             </p>
+            
+            {/* Hidden Feature Discovery - CTA for Studio */}
+            <div className="pt-6 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+               <button 
+                 onClick={() => setIsTrainingOpen(true)}
+                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/50 dark:bg-white/5 border border-white/20 dark:border-white/10 text-xs md:text-sm font-medium text-gray-600 dark:text-zinc-400 hover:bg-white/80 dark:hover:bg-white/10 hover:scale-105 transition-all shadow-sm"
+               >
+                 <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                 Want the AI to sound like you? <span className="text-blue-600 dark:text-blue-400 font-semibold">Customize Logic</span>
+               </button>
+            </div>
           </div>
         )}
 
-        <div className="w-full relative">
-          {/* Input Card */}
+        {/* Mobile Tab Switcher (Only Visible on Mobile when Success) */}
+        {isSuccess && (
+          <div className="md:hidden sticky top-24 z-40 w-full px-2 mb-4 animate-fade-in-up">
+            <div className="bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md rounded-full p-1 flex shadow-lg border border-white/20 dark:border-white/10">
+              <button 
+                onClick={() => setMobileTab('input')} 
+                className={`flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${mobileTab === 'input' ? 'bg-[#0071e3] text-white shadow-md' : 'text-gray-500 dark:text-zinc-400'}`}
+              >
+                Input
+              </button>
+              <button 
+                onClick={() => setMobileTab('output')} 
+                className={`flex-1 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${mobileTab === 'output' ? 'bg-[#0071e3] text-white shadow-md' : 'text-gray-500 dark:text-zinc-400'}`}
+              >
+                Result
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className={`
+           w-full transition-all duration-700
+           ${isSuccess ? 'grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start' : ''}
+        `}>
+          
+          {/* INPUT COLUMN */}
           <div className={`
-            w-full transition-all duration-700 ease-spring
-            ${appState === AppState.SUCCESS 
-              ? 'absolute top-0 left-0 w-full opacity-0 pointer-events-none scale-95 z-0 translate-y-[-20px]' 
-              : 'relative z-10 opacity-100 scale-100 translate-y-0'
-            }
+             w-full transition-all duration-700 ease-spring order-1
+             ${isSuccess ? 'relative' : 'relative z-10'}
+             /* Mobile Tab Logic: Hide if success AND tab is output */
+             ${isSuccess && mobileTab === 'output' ? 'hidden md:block' : 'block'}
           `}>
-            {/* Outer Bezel - Refined Polish */}
-            <div className="glass-panel rounded-[24px] md:rounded-[32px] p-[1px] transition-all duration-500 shadow-xl shadow-black/5 dark:shadow-black/50 ring-1 ring-black/5 dark:ring-white/5 group hover:shadow-2xl hover:shadow-black/10 dark:hover:shadow-black/70">
+            {/* Input Card - Adaptive Bezel */}
+            {/* On mobile, we collapse the padding and borders to maximize space */}
+            <div className={`
+              glass-panel transition-all duration-500
+              ${isSuccess ? 'shadow-md md:shadow-lg' : 'shadow-xl shadow-black/5 dark:shadow-black/50'}
               
-              {/* Inner Content - Screen Effect */}
-              <div className="bg-white/40 dark:bg-[#1c1c1e]/50 rounded-[23px] md:rounded-[31px] p-1.5 backdrop-blur-[2px]">
+              /* Mobile: Simplified container */
+              rounded-2xl border-0 p-0 bg-transparent backdrop-filter-none shadow-none
+
+              /* Desktop: Premium Bezel */
+              md:rounded-[32px] md:border md:border-white/20 md:dark:border-white/5 md:p-[1px] md:bg-white/40 md:backdrop-blur-xl md:shadow-2xl
+            `}>
+              
+              {/* Inner Wrapper - Desktop Only */}
+              <div className="
+                 md:bg-white/40 md:dark:bg-[#1c1c1e]/50 md:rounded-[31px] md:p-1.5 md:backdrop-blur-[2px]
+                 transition-all duration-500
+              ">
                  {/* Input Surface */}
-                 <div className="bg-white/60 dark:bg-black/80 rounded-[20px] md:rounded-[28px] p-4 md:p-6 transition-colors duration-500 border border-white/40 dark:border-white/10 shadow-sm">
-                    <div className="h-48 md:h-64">
+                 <div className={`
+                    bg-white/60 dark:bg-black/80 
+                    transition-colors duration-500 
+                    border border-white/40 dark:border-white/10 shadow-sm
+                    flex flex-col
+                    
+                    /* Mobile: Tighter padding, smaller radius */
+                    rounded-2xl p-3
+
+                    /* Desktop: Generous padding */
+                    md:rounded-[28px] md:p-6
+                 `}>
+                    <div className={`transition-all duration-500 w-full ${isSuccess ? 'h-48 md:h-[40vh]' : 'h-48 md:h-64'}`}>
                       <TextArea
                         placeholder="Paste the job description here..."
                         value={summary}
                         onChange={(e) => setSummary(e.target.value)}
+                        className="text-base md:text-lg"
                       />
                     </div>
-                    
-                    {/* Collapsible Additional Instructions */}
-                    <div className="px-1 border-t border-black/5 dark:border-white/10">
-                      <button 
-                        onClick={() => setIsExtraOpen(!isExtraOpen)}
-                        className="w-full flex items-center justify-between py-2 text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 transition-colors uppercase tracking-wide font-medium"
-                      >
-                         <span>Additional Instructions (Optional)</span>
-                         <svg className={`w-3 h-3 transition-transform duration-300 ${isExtraOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                      </button>
-                      
-                      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isExtraOpen ? 'max-h-24 opacity-100 mb-2' : 'max-h-0 opacity-0'}`}>
-                        <input 
-                          type="text" 
-                          value={extraInstructions}
-                          onChange={(e) => setExtraInstructions(e.target.value)}
-                          placeholder="e.g. Focus on my 5 years of experience with React..."
-                          className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-blue-500/50 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-zinc-200 placeholder-gray-400 focus:outline-none transition-all"
-                        />
-                      </div>
-                    </div>
 
-                    {/* Toolbar */}
-                    <div className="flex justify-between items-center px-1 pt-2">
-                      <span className="text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 font-medium ml-1 md:ml-2 tracking-wide uppercase">
-                        {summary.length > 0 ? `${summary.length} CHARS` : 'READY'}
-                      </span>
-                      <Button 
-                        onClick={handleGenerate} 
-                        isLoading={appState === AppState.GENERATING}
-                        disabled={!summary.trim()}
-                        className="scale-90 md:scale-100 origin-right shadow-lg shadow-blue-500/20"
-                      >
-                        Generate
-                      </Button>
+                    {/* Controls Section */}
+                    <div className="mt-auto">
+                        {/* Quick Controls - Centered */}
+                        <div className="mt-2 border-t border-black/5 dark:border-white/5 pt-3">
+                            <QuickControls onSelect={handleQuickControl} />
+                        </div>
+                        
+                        {/* Additional Instructions - Centered */}
+                        <div className="px-1 mt-1">
+                            <button 
+                                onClick={() => setIsExtraOpen(!isExtraOpen)}
+                                className="w-full flex items-center justify-center gap-2 py-2 text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 hover:text-gray-600 dark:hover:text-zinc-300 transition-colors uppercase tracking-wide font-medium group"
+                            >
+                                <span>Additional Instructions</span>
+                                <svg className={`w-3 h-3 transition-transform duration-300 ${isExtraOpen ? 'rotate-180' : ''} opacity-50 group-hover:opacity-100`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                            
+                            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isExtraOpen ? 'max-h-24 opacity-100 mb-2' : 'max-h-0 opacity-0'}`}>
+                                <input 
+                                type="text" 
+                                value={extraInstructions}
+                                onChange={(e) => setExtraInstructions(e.target.value)}
+                                placeholder="e.g. Focus on my 5 years of experience..."
+                                className="w-full bg-black/5 dark:bg-white/5 border border-transparent focus:border-blue-500/50 rounded-lg px-4 py-2 text-sm text-center text-gray-800 dark:text-zinc-200 placeholder-gray-400 focus:outline-none transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Status Row - Centered */}
+                        <div className="flex justify-center items-center gap-4 py-2 text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 font-medium uppercase tracking-wider">
+                            <span>{summary.length > 0 ? `${summary.length} CHARS` : 'READY'}</span>
+                            {summary.length > 0 && (
+                                <>
+                                    <span className="opacity-30">•</span>
+                                    <button 
+                                        onClick={() => setSummary('')} 
+                                        className="hover:text-red-500 transition-colors"
+                                    >
+                                        Clear
+                                    </button>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Main Action Button */}
+                        <Button 
+                            onClick={handleGenerate} 
+                            isLoading={appState === AppState.GENERATING}
+                            loadingText={loadingMessage}
+                            disabled={!summary.trim()}
+                            className="w-full py-4 text-base font-semibold shadow-xl shadow-blue-500/20 hover:shadow-blue-500/40 rounded-2xl md:text-lg"
+                        >
+                            {isSuccess ? 'Regenerate Proposal' : 'Generate Proposal'}
+                        </Button>
                     </div>
                  </div>
               </div>
             </div>
+            
+            {/* Error Message */}
+            {appState === AppState.ERROR && (
+               <div className="mt-4 p-4 bg-red-50/80 dark:bg-red-900/20 backdrop-blur-xl border border-red-200/50 dark:border-red-500/20 rounded-2xl text-red-600 dark:text-red-200 text-center text-sm font-medium animate-shake shadow-lg">
+                  Something went wrong. Please check your connection and API key.
+                  <button onClick={() => setAppState(AppState.IDLE)} className="ml-3 underline hover:text-red-800 dark:hover:text-white transition-colors">Try Again</button>
+               </div>
+            )}
           </div>
 
-          {/* Result Display - Takes Layout Flow when visible */}
-          {appState === AppState.SUCCESS && (
-            <div className="relative w-full z-20 animate-fade-in-up">
+          {/* OUTPUT COLUMN */}
+          {isSuccess && (
+            <div 
+              ref={outputRef} 
+              className={`
+                w-full relative z-20 animate-fade-in-up order-2 
+                /* Mobile Tab Logic: Hide if success AND tab is input */
+                ${isSuccess && mobileTab === 'input' ? 'hidden md:block' : 'block'}
+              `}
+            >
               <OutputDisplay 
                 content={generatedProposal} 
-                onClose={handleReset} 
+                onClose={() => {
+                   handleReset();
+                }} 
               />
-              <div className="mt-8 md:mt-12 flex justify-center pb-8">
-                 <button 
-                  onClick={handleReset}
-                  className="px-6 py-3 md:px-8 md:py-3 rounded-full bg-white/80 dark:bg-zinc-800 text-gray-800 dark:text-zinc-100 font-medium hover:scale-[1.05] active:scale-[0.95] transition-all duration-300 text-sm backdrop-blur-md shadow-lg shadow-black/5 dark:shadow-black/30 border border-white/20 dark:border-white/10"
-                 >
-                   Create Another
-                 </button>
+              <div className="mt-4 text-center md:hidden">
+                <p className="text-xs text-gray-400">Use tabs above to edit input</p>
               </div>
             </div>
           )}
           
-          {/* Error Message */}
-          {appState === AppState.ERROR && (
-             <div className="absolute top-full left-0 w-full mt-4 md:mt-6 p-4 bg-red-50/80 dark:bg-red-900/20 backdrop-blur-xl border border-red-200/50 dark:border-red-500/20 rounded-2xl text-red-600 dark:text-red-200 text-center text-sm font-medium animate-shake shadow-lg z-30">
-                Something went wrong. Please check your connection.
-                <button onClick={() => setAppState(AppState.IDLE)} className="ml-3 underline hover:text-red-800 dark:hover:text-white transition-colors">Try Again</button>
-             </div>
-          )}
         </div>
       </main>
 

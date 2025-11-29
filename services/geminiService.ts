@@ -1,15 +1,30 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { SYSTEM_PROMPT } from "../constants";
-import { TrainingData } from "../types";
+import { TrainingData, ApiConfig } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+export const generateProposal = async (
+  summary: string, 
+  trainingData?: TrainingData, 
+  extraInstructions?: string,
+  apiConfig?: ApiConfig
+): Promise<string> => {
+  
+  // Determine Provider and Key
+  const provider = apiConfig?.provider || 'gemini';
+  // If user provided a key, use it. Otherwise fallback to env var (only for Gemini default).
+  const apiKey = apiConfig?.apiKey || (provider === 'gemini' ? process.env.API_KEY : '');
 
-export const generateProposal = async (summary: string, trainingData?: TrainingData, extraInstructions?: string): Promise<string> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing. Please check your environment variables.");
+  if (!apiKey && provider !== 'gemini') {
+    throw new Error(`API Key is required for ${provider}. Please configure it in settings.`);
+  }
+  
+  // Fallback for Gemini if no user key and no env key
+  if (provider === 'gemini' && !apiKey) {
+     throw new Error("API Key is missing. Please configure it in settings.");
   }
 
-  // Construct the training context if provided
+  // Construct the training context
   let trainingContext = "";
   
   if (trainingData) {
@@ -62,22 +77,63 @@ export const generateProposal = async (summary: string, trainingData?: TrainingD
   `;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: userPrompt,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        temperature: 0.45, // Slightly higher to allow style adaptation
-      },
-    });
+    // --- GEMINI HANDLER ---
+    if (provider === 'gemini') {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: apiConfig?.model || 'gemini-2.5-flash',
+        contents: userPrompt,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature: 0.45, 
+        },
+      });
 
-    if (response.text) {
-      return response.text;
-    } else {
-      throw new Error("No content generated.");
+      if (response.text) {
+        return response.text;
+      } else {
+        throw new Error("No content generated.");
+      }
     }
+
+    // --- OPENAI / GROQ HANDLER ---
+    if (provider === 'openai' || provider === 'groq') {
+       const baseUrl = provider === 'openai' 
+         ? 'https://api.openai.com/v1/chat/completions' 
+         : 'https://api.groq.com/openai/v1/chat/completions';
+       
+       const defaultModel = provider === 'openai' ? 'gpt-4o' : 'llama3-70b-8192';
+       const model = apiConfig?.model || defaultModel;
+
+       const response = await fetch(baseUrl, {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+           'Authorization': `Bearer ${apiKey}`
+         },
+         body: JSON.stringify({
+           model: model,
+           messages: [
+             { role: "system", content: SYSTEM_PROMPT },
+             { role: "user", content: userPrompt }
+           ],
+           temperature: 0.5
+         })
+       });
+
+       if (!response.ok) {
+         const errorData = await response.json();
+         throw new Error(errorData.error?.message || `Failed to fetch from ${provider}`);
+       }
+
+       const data = await response.json();
+       return data.choices[0]?.message?.content || "";
+    }
+
+    throw new Error("Unsupported provider selected.");
+
   } catch (error) {
-    console.error("Gemini API Error:", error);
+    console.error(`${provider} API Error:`, error);
     throw error;
   }
 };

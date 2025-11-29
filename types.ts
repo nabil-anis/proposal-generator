@@ -1,3 +1,4 @@
+
 export interface ProposalRequest {
   summary: string;
 }
@@ -8,8 +9,24 @@ export interface ProposalResponse {
 
 export interface TrainingData {
   customInstructions: string;
-  examples: string[]; // Changed from single string to array
-  isLocked: boolean;  // New field to lock editing
+  examples: string[]; 
+  isLocked: boolean;
+}
+
+export type AIProvider = 'gemini' | 'openai' | 'groq';
+
+export interface ApiConfig {
+  provider: AIProvider;
+  apiKey: string;
+  model?: string;
+}
+
+export interface Proposal {
+  id: string;
+  job_description: string;
+  proposal_text: string;
+  created_at: string;
+  user_id?: string;
 }
 
 export enum AppState {
