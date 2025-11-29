@@ -15,6 +15,7 @@ const App: React.FC = () => {
   const [summary, setSummary] = useState('');
   const [generatedProposal, setGeneratedProposal] = useState('');
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
+  const [errorMessage, setErrorMessage] = useState('');
   const [isTrainingOpen, setIsTrainingOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -263,6 +264,7 @@ const App: React.FC = () => {
     
     setAppState(AppState.GENERATING);
     setGeneratedProposal('');
+    setErrorMessage('');
     
     // Cycle loading messages to build trust ("Magic is invisible" fix)
     const steps = [
@@ -291,10 +293,11 @@ const App: React.FC = () => {
       // Save to History
       saveToHistory(summary, result);
       
-    } catch (error) {
+    } catch (error: any) {
       clearInterval(interval);
       console.error(error);
       setAppState(AppState.ERROR);
+      setErrorMessage(error.message || "Something went wrong. Please check your connection and API key.");
     }
   };
 
@@ -304,6 +307,7 @@ const App: React.FC = () => {
     setExtraInstructions(''); 
     setIsExtraOpen(false);
     setMobileTab('input');
+    setErrorMessage('');
   };
 
   const handleHistorySelect = (proposal: Proposal) => {
@@ -445,7 +449,7 @@ const App: React.FC = () => {
       <main className={`
         flex-1 flex flex-col w-full mx-auto px-2 md:px-6 z-10 
         pt-28 md:pt-36 pb-12 transition-all duration-500 ease-in-out
-        ${isSuccess ? 'max-w-7xl justify-start' : 'max-w-4xl justify-center'}
+        ${isSuccess ? 'max-w-4xl justify-start' : 'max-w-4xl justify-center'}
       `}>
         
         {/* Intro Text (only when IDLE) */}
@@ -491,15 +495,12 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <div className={`
-           w-full transition-all duration-700
-           ${isSuccess ? 'grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start' : ''}
-        `}>
+        <div className="w-full flex flex-col gap-6 items-center">
           
           {/* INPUT COLUMN */}
           <div className={`
-             w-full transition-all duration-700 ease-spring order-1
-             ${isSuccess ? 'relative' : 'relative z-10'}
+             w-full transition-all duration-700 ease-spring
+             ${isSuccess ? 'relative order-1' : 'relative z-10'}
              /* Mobile Tab Logic: Hide if success AND tab is output */
              ${isSuccess && mobileTab === 'output' ? 'hidden md:block' : 'block'}
           `}>
@@ -526,7 +527,7 @@ const App: React.FC = () => {
                     bg-white/60 dark:bg-black/80 
                     transition-colors duration-500 
                     border border-white/40 dark:border-white/10 shadow-sm
-                    flex flex-col
+                    flex flex-col relative
                     
                     /* Mobile: Tighter padding, smaller radius */
                     rounded-2xl p-3
@@ -541,6 +542,12 @@ const App: React.FC = () => {
                         onChange={(e) => setSummary(e.target.value)}
                         className="text-base md:text-lg"
                       />
+                      {/* Character Count - Absolute positioning inside text area wrapper */}
+                      <div className="absolute bottom-28 md:bottom-32 right-3 md:right-6 pointer-events-none opacity-50 z-10">
+                        <span className="text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 font-medium tracking-wide uppercase bg-white/80 dark:bg-black/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                           {summary.length > 0 ? `${summary.length} CHARS` : 'READY'}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Controls Section */}
@@ -571,21 +578,17 @@ const App: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Status Row - Centered */}
-                        <div className="flex justify-center items-center gap-4 py-2 text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 font-medium uppercase tracking-wider">
-                            <span>{summary.length > 0 ? `${summary.length} CHARS` : 'READY'}</span>
-                            {summary.length > 0 && (
-                                <>
-                                    <span className="opacity-30">•</span>
-                                    <button 
-                                        onClick={() => setSummary('')} 
-                                        className="hover:text-red-500 transition-colors"
-                                    >
-                                        Clear
-                                    </button>
-                                </>
-                            )}
-                        </div>
+                        {/* Status Row - Centered (Character count moved, only clear button here if needed) */}
+                        {summary.length > 0 && (
+                            <div className="flex justify-center items-center py-2">
+                                <button 
+                                    onClick={() => setSummary('')} 
+                                    className="text-[10px] md:text-xs text-gray-400 dark:text-zinc-500 hover:text-red-500 transition-colors uppercase tracking-wider font-medium"
+                                >
+                                    Clear Input
+                                </button>
+                            </div>
+                        )}
 
                         {/* Main Action Button */}
                         <Button 
@@ -593,7 +596,7 @@ const App: React.FC = () => {
                             isLoading={appState === AppState.GENERATING}
                             loadingText={loadingMessage}
                             disabled={!summary.trim()}
-                            className="w-full py-4 text-base font-semibold shadow-xl shadow-blue-500/20 hover:shadow-blue-500/40 rounded-2xl md:text-lg"
+                            className="w-full py-4 text-base font-semibold shadow-xl shadow-blue-500/20 hover:shadow-blue-500/40 rounded-2xl md:text-lg mt-2"
                         >
                             {isSuccess ? 'Regenerate Proposal' : 'Generate Proposal'}
                         </Button>
@@ -605,7 +608,7 @@ const App: React.FC = () => {
             {/* Error Message */}
             {appState === AppState.ERROR && (
                <div className="mt-4 p-4 bg-red-50/80 dark:bg-red-900/20 backdrop-blur-xl border border-red-200/50 dark:border-red-500/20 rounded-2xl text-red-600 dark:text-red-200 text-center text-sm font-medium animate-shake shadow-lg">
-                  Something went wrong. Please check your connection and API key.
+                  {errorMessage}
                   <button onClick={() => setAppState(AppState.IDLE)} className="ml-3 underline hover:text-red-800 dark:hover:text-white transition-colors">Try Again</button>
                </div>
             )}
